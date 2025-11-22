@@ -1,0 +1,6 @@
+openai
+pytest
+
+# Optional helpers
+PyYAML
+boto3

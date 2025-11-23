@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Orquestador Hybrid Cloud</title>
+    <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+
+<h1>☁️ Orquestador Hybrid Cloud (AWS + GCP)</h1>
+
+<div class="card">
+    <h2>🚀 Desplegar Nuevo Cluster</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div><label>Nombre</label><input type="text" id="vm_name" placeholder="Ej: live-demo"></div>
+        <div><label>Nodos Iniciales</label><input type="number" id="cluster_size" value="2" min="2" max="10"></div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div><label>Tipo</label><select id="vm_type"><option value="e2-micro">Micro</option><option value="e2-medium" selected>Estándar</option></select></div>
+        <div><label>Disco (GB)</label><input type="number" id="vm_disk" value="15" min="10"></div>
+    </div>
+    <button id="createBtn" onclick="createCluster()">🌐 Lanzar Infraestructura</button>
+    <div class="spinner" id="createSpinner"></div>
+    <div id="create_result"></div>
+</div>
+
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h2 style="margin:0;">Estado de la Infraestructura</h2>
+        <button onclick="listVMs()" style="width:auto; padding:8px 20px;">↻ Refrescar Todo</button>
+    </div>
+    <div class="spinner" id="listSpinner"></div>
+    <div id="clusters-container"></div>
+</div>
+
+<div id="vmModal" class="modal-overlay">
+    <div class="modal-content">
+        <span class="close-btn" onclick="document.getElementById('vmModal').style.display='none'">&times;</span>
+        <h2 id="modalTitle">Detalles</h2><div id="modalDetails"></div>
+        
+        <div style="margin-top:20px; background:#f9f9f9; padding:15px; border-radius:8px;">
+            <h3>📊 Monitorización</h3>
+            <div id="metrics-display" style="display:none; grid-template-columns: 1fr 1fr 1fr; gap:10px; text-align:center;">
+                <div class="metric-box"><span style="font-size:1.5em">cpu</span><b id="met-cpu"></b></div>
+                <div class="metric-box"><span style="font-size:1.5em">memory</span><b id="met-ram"></b></div>
+                <div class="metric-box"><span style="font-size:1.5em">storage</span><b id="met-disk"></b></div>
+            </div>
+            <button id="btn-monitor" onclick="monitorSingleNode()" style="width:100%; margin-top:10px; background:#f59e0b;">🔍 Analizar</button>
+            <div id="monitor-spinner" class="spinner" style="width:20px; height:20px;"></div>
+        </div>
+
+        <hr style="margin:20px 0; border-top:1px solid #eee;">
+        <label>Usuario SSH</label><input type="text" id="modal_ssh_user" placeholder="usuario">
+        <button onclick="generateSSH()">Comando SSH</button>
+        <pre id="modal_ssh_result" style="display:none; margin-top:10px;"></pre>
+        <input type="hidden" id="h_name"><input type="hidden" id="h_zone"><input type="hidden" id="h_provider"><input type="hidden" id="h_ip">
+    </div>
+</div>
+
+<div id="swarmModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 650px;">
+        <span class="close-btn" onclick="document.getElementById('swarmModal').style.display='none'">&times;</span>
+        <h2>🔗 Consola</h2>
+        <div id="swarmLogs" class="console-log" style="height:300px;"></div>
+    </div>
+</div>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<script>
+function showToast(msg, type='info') {
+    const c = document.getElementById('toastContainer'), t = document.createElement('div');
+    t.className = `toast ${type}`; t.innerHTML = `<span>${msg}</span>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 4000);
+}
+
+function createCluster() {
+    const btn=document.getElementById("createBtn"), spin=document.getElementById("createSpinner"), out=document.getElementById("create_result");
+    const name=document.getElementById("vm_name").value;
+    if(!name) return alert("Falta nombre");
+    btn.disabled=true; spin.style.display="block";
+    out.innerHTML = `<div class="console-log" id="consoleLog"></div>`;
+    const log = document.getElementById("consoleLog");
+    const add = (t) => { log.innerHTML += `<div>> ${t}</div>`; log.scrollTop=log.scrollHeight; };
+    add("Iniciando...");
+    fetch("/create-vm", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ vm_name: name, cluster_size: document.getElementById("cluster_size").value, machine_type: document.getElementById("vm_type").value, disk_size: document.getElementById("vm_disk").value }) }).then(r=>r.text()).then(d => { spin.style.display="none"; btn.disabled=false; if(d.includes("ERROR")) { add("❌ ERROR."); add(d); } else { add("✅ LISTO."); setTimeout(listVMs, 1500); } });
+}
+
+function listVMs() {
+    const container = document.getElementById("clusters-container"), spin = document.getElementById("listSpinner");
+    container.style.opacity=0.5; spin.style.display="block";
+    fetch("/list-vms").then(r=>r.json()).then(vms => {
+        spin.style.display="none"; container.style.opacity=1; container.innerHTML="";
+        const clusters = {};
+        vms.forEach(vm => {
+            const cid = vm.cluster_id || 'Sin Grupo';
+            if(!clusters[cid]) clusters[cid] = [];
+            clusters[cid].push(vm);
+        });
+
+        Object.keys(clusters).forEach(cid => {
+            const nodes = clusters[cid];
+            nodes.sort((a,b) => a.name.includes("-1") ? -1 : 1);
+            
+            // Crear Header del Grupo
+            const group = document.createElement("div");
+            group.className = "cluster-group";
+            group.innerHTML = `
+                <div class="cluster-header">
+                    <span class="cluster-title">📦 ${cid}</span>
+                    <div>
+                        <button class="btn-connect-swarm" onclick="addNode('${cid}')" style="background:#3b82f6; margin-right:10px;">➕ Añadir Nodo</button>
+                        <button class="btn-connect-swarm" onclick="setupSwarm('${cid}')" style="margin-right:10px;">🔗 Conectar</button>
+                        <button class="btn-connect-swarm" onclick="deployApp('${cid}')" style="background:#10b981;">🚀 App</button>
+                    </div>
+                </div>
+                <div class="vm-grid" id="grid-${cid}"></div>
+            `;
+            container.appendChild(group);
+            const grid = group.querySelector(`#grid-${cid}`);
+            
+            // Pintar tarjetas
+            nodes.forEach(vm => {
+                // LÓGICA DEL SIMBOLITO DE ESTADO
+                let statusIcon = '🔴'; // Default Stopped
+                if(vm.status === 'RUNNING') statusIcon = '🟢';
+                else if(vm.status === 'PROVISIONING' || vm.status === 'PENDING') statusIcon = '🔄';
+                
+                const card = document.createElement("div");
+                card.className = "vm-card";
+                if(vm.name.endsWith("-1")) card.style.border="2px solid #7c3aed";
+                
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span class="provider-badge provider-${vm.provider}">${vm.provider}</span>
+                        <button style="border:none; background:none; cursor:pointer; font-size:1.2em;" onclick="deleteNode('${vm.name}', '${vm.zone}', '${vm.provider}', '${vm.id}', event)">🗑️</button>
+                    </div>
+                    <span class="vm-name" onclick="openModal('${vm.name}', '${vm.zone}', '${vm.provider}', '${vm.external_ip}')">${vm.name}</span>
+                    <div style="display:flex; justify-content:space-between; margin-top:5px;">
+                        <small>${vm.external_ip}</small>
+                        <span title="${vm.status}" style="cursor:help;">${statusIcon}</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        });
+    });
+}
+
+// --- NUEVO: AÑADIR NODO (ESCALADO) ---
+function addNode(cid) {
+    if(!confirm(`¿Añadir un nuevo nodo al cluster ${cid}?`)) return;
+    showToast(`Calculando expansión para ${cid}...`, "info");
+    
+    fetch("/list-vms").then(r=>r.json()).then(allVms => {
+        const clusterVms = allVms.filter(v => v.cluster_id === cid);
+        
+        // Calcular siguiente número (nombre-X)
+        let maxNum = 0;
+        let lastProvider = "GCP"; // Default
+        
+        clusterVms.forEach(vm => {
+            const parts = vm.name.split('-');
+            const num = parseInt(parts[parts.length-1]);
+            if(!isNaN(num) && num > maxNum) {
+                maxNum = num;
+                lastProvider = vm.provider; // Guardamos el último para alternar
+            }
+        });
+        
+        const nextNum = maxNum + 1;
+        const nextName = `${cid}-worker-${nextNum}`; // Siempre worker si añadimos después
+        const nextProvider = lastProvider === "GCP" ? "AWS" : "GCP"; // Alternar
+        
+        showToast(`Solicitando ${nextName} en ${nextProvider}...`, "info");
+        
+        // Llamada al backend
+        fetch("/scale-cluster", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ name: nextName, provider: nextProvider, cluster_id: cid })
+        }).then(r=>r.text()).then(d => {
+            if(d.includes("ERROR")) showToast("Error al escalar", "error");
+            else { showToast("Nodo añadido. Refrescando...", "success"); setTimeout(listVMs, 2000); }
+        });
+    });
+}
+
+function setupSwarm(cid) { runOp(cid, "/setup-swarm", "Iniciando Swarm..."); }
+function deployApp(cid) { runOp(cid, "/deploy-app", "Desplegando App..."); }
+
+function runOp(cid, endpoint, msg) {
+    const user = prompt("Usuario GCP:", "adrian"); if(!user) return;
+    fetch("/list-vms").then(r=>r.json()).then(vms => {
+        const clusterVms = vms.filter(v => v.cluster_id === cid);
+        document.getElementById("swarmModal").style.display="flex";
+        document.getElementById("swarmLogs").innerHTML = `> ${msg}`;
+        fetch(endpoint, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ vms: clusterVms, user: user }) }).then(r=>r.text()).then(d => document.getElementById("swarmLogs").innerHTML += "\n\n" + d);
+    });
+}
+
+function deleteNode(name, zone, provider, id, event) {
+    event.stopPropagation();
+    if(!confirm(`¿Eliminar ${name}?`)) return;
+    showToast(`Eliminando ${name}...`, "info");
+    fetch("/delete-vm", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ name, zone, provider, id }) }).then(r=>r.text()).then(d => { showToast(d, "success"); setTimeout(listVMs, 2000); });
+}
+
+function openModal(name, zone, prov, ip) {
+    document.getElementById("vmModal").style.display="flex";
+    document.getElementById("modalDetails").innerHTML = `<b>${prov}</b> - ${name}<br>IP: ${ip}`;
+    document.getElementById("h_name").value=name; document.getElementById("h_zone").value=zone; document.getElementById("h_provider").value=prov; document.getElementById("h_ip").value=ip;
+    document.getElementById("metrics-display").style.display="none";
+}
+
+function monitorSingleNode() {
+    const n=document.getElementById("h_name").value; const p=document.getElementById("h_provider").value;
+    let u="ubuntu"; if(p==="GCP") { u=prompt("Usuario GCP:", "adrian"); if(!u) return; }
+    
+    const btn=document.getElementById("btn-monitor"), spin=document.getElementById("monitor-spinner"), disp=document.getElementById("metrics-display");
+    btn.disabled=true; spin.style.display="block"; disp.style.display="none";
+    
+    fetch("/monitor-nodes", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ vms:[{name:n, external_ip:document.getElementById("h_ip").value, provider:p}], user:u }) }).then(r=>r.json()).then(d => {
+        spin.style.display="none"; btn.disabled=false;
+        if(d[n] && d[n].status==='success') {
+            document.getElementById("met-cpu").innerText=d[n].cpu+"%"; document.getElementById("met-ram").innerText=d[n].ram+"%"; document.getElementById("met-disk").innerText=d[n].disk+"%";
+            disp.style.display="grid";
+        } else alert("Error métricas");
+    }).catch(()=>{ spin.style.display="none"; btn.disabled=false; alert("Error conexión"); });
+}
+
+function generateSSH() {
+    const u = document.getElementById("modal_ssh_user").value;
+    const p = document.getElementById("h_provider").value;
+    const ip = document.getElementById("h_ip").value;
+    if(p==="AWS") return document.getElementById("modal_ssh_result").style.display="block", document.getElementById("modal_ssh_result").innerText = `ssh -i aws/HackEPS-Key.pem ubuntu@${ip}`;
+    fetch("/get-ssh", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ vm_name: document.getElementById("h_name").value, zone: document.getElementById("h_zone").value, user: u, external_ip: ip }) }).then(r=>r.text()).then(d => { document.getElementById("modal_ssh_result").style.display="block"; document.getElementById("modal_ssh_result").innerText=d; });
+}
+
+listVMs();
+</script>
+</body>
+</html>

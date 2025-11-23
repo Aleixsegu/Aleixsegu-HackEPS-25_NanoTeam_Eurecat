@@ -1,0 +1,121 @@
+/* =========================================
+   1. ESTILOS GENERALES Y FORMULARIO
+   ========================================= */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f3f4f6;
+    margin: 0; padding: 20px; color: #333;
+}
+.card {
+    background: #fff; padding: 25px; border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px;
+}
+label { display: block; margin-top: 15px; font-weight: 600; color: #4b5563; font-size: 0.9rem; margin-bottom: 5px; }
+input[type="text"], input[type="number"], select, button {
+    padding: 12px; margin: 5px 0; width: 100%; border-radius: 8px;
+    border: 1px solid #d1d5db; box-sizing: border-box; font-size: 1rem;
+}
+button {
+    background: linear-gradient(to bottom, #2563eb, #1d4ed8); color: white;
+    cursor: pointer; font-weight: bold; margin-top: 25px; border: none;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.2s;
+}
+button:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); }
+button:disabled { background: #9ca3af; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.spinner {
+    margin-top: 15px; display: none; border: 4px solid #e5e7eb; border-top: 4px solid #2563eb;
+    border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-left: auto; margin-right: auto;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* =========================================
+   2. GRUPOS DE CLUSTERS (NUEVO)
+   ========================================= */
+.cluster-group {
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px;
+    padding: 20px; margin-bottom: 30px; position: relative;
+}
+.cluster-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;
+}
+.cluster-title { font-size: 1.1rem; font-weight: 800; color: #1f2937; text-transform: uppercase; letter-spacing: 1px; }
+
+.btn-connect-swarm {
+    background: #7c3aed; /* Morado */
+    color: white; padding: 6px 16px; border-radius: 6px; font-size: 0.9rem;
+    margin: 0; border: none; cursor: pointer;
+}
+.btn-connect-swarm:hover { background: #6d28d9; }
+
+/* Grid dentro del cluster */
+.vm-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 15px;
+}
+.loading-grid { opacity: 0.5; pointer-events: none; }
+
+.vm-card {
+    background: white; border: 1px solid #e5e7eb; border-radius: 12px;
+    padding: 15px; cursor: pointer; transition: transform 0.2s;
+}
+.vm-card:hover { transform: translateY(-3px); border-color: #2563eb; }
+.vm-name { font-weight: bold; display: block; margin-bottom: 5px; color: #111; }
+
+.provider-badge {
+    font-size: 0.7rem; font-weight: 800; padding: 3px 8px; border-radius: 4px;
+    color: white; text-transform: uppercase;
+}
+.provider-GCP { background: #4285F4; border: 1px solid #3367D6; }
+.provider-AWS { background: #FF9900; border: 1px solid #CC7A00; }
+.status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: auto; }
+.status-RUNNING { background-color: #10b981; } .status-PENDING { background-color: #f59e0b; }
+
+/* =========================================
+   3. MODALES Y LOGS
+   ========================================= */
+.modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.6); z-index: 1000; justify-content: center; align-items: center;
+}
+.modal-content {
+    background: white; padding: 30px; border-radius: 16px; width: 90%; max-width: 600px;
+    position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+}
+.close-btn { position: absolute; top: 20px; right: 25px; font-size: 24px; cursor: pointer; color: #9ca3af; }
+.console-log {
+    background: #1e1e1e; color: #0f0; font-family: monospace; font-size: 0.8rem;
+    padding: 15px; border-radius: 8px; height: 180px; overflow-y: auto; border: 1px solid #374151; margin-top: 20px;
+}
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
+.toast {
+    background: #1f2937; color: white; padding: 14px 20px; border-radius: 8px; margin-top: 10px;
+    display: flex; align-items: center; min-width: 300px;
+}
+.toast.success { border-left: 5px solid #10b981; } .toast.error { border-left: 5px solid #ef4444; }
+
+/* (Añadir al final de style.css) */
+
+.metric-box {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Iconos estilo Material Symbols (usando texto simple por ahora) */
+.metric-box span {
+    font-family: 'Segoe UI Emoji', sans-serif; 
+    margin-bottom: 5px;
+}
+
+.btn-add-node {
+    background: #3b82f6;
+    color: white; padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.9rem;
+}
+.btn-add-node:hover { background: #2563eb; }
